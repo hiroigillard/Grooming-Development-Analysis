@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import argparse
 
 def convert_binary_csv_to_theme(input_folder, output_folder):
     """
@@ -16,8 +17,12 @@ def convert_binary_csv_to_theme(input_folder, output_folder):
     """
     # Create the output folder if it doesn't exist
     if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-        print(f"Created output folder: {output_folder}")
+        try:
+            os.makedirs(output_folder)
+            print(f"Created output folder: {output_folder}")
+        except OSError as e:
+            print(f"Error creating output folder '{output_folder}': {e}")
+            return
 
     # List all files in the input folder
     try:
@@ -43,12 +48,13 @@ def convert_binary_csv_to_theme(input_folder, output_folder):
             # Read the CSV file into a pandas DataFrame
             df = pd.read_csv(input_filepath)
 
+            if df.empty:
+                print(f"  - Warning: '{filename}' is empty. Skipping.")
+                continue
+
             # Use the first column as the time index, assuming it's the frame number
             time_col = df.columns[0]
             df = df.set_index(time_col)
-
-            # Identify behavior columns (all columns except the original index)
-            behavior_columns = df.columns
 
             # List to store the events (time, event_name)
             events = []
@@ -64,10 +70,13 @@ def convert_binary_csv_to_theme(input_folder, output_folder):
 
                     # We only care about transitions to a new, meaningful behavior
                     # We ignore the 'background' behavior as an event itself
-                    if current_behavior != previous_behavior and current_behavior.lower() != 'background':
+                    if current_behavior != previous_behavior and str(current_behavior).lower() != 'background':
                         events.append((time, current_behavior))
 
                     previous_behavior = current_behavior
+                else:
+                    # If no behavior is active (all zeros), treat as background/transition
+                    previous_behavior = None
 
             # If no events were found, skip creating a file
             if not events:
@@ -99,19 +108,28 @@ def convert_binary_csv_to_theme(input_folder, output_folder):
     print("\nConversion complete.")
 
 
-# --- HOW TO USE ---
-# 1. Place your .csv files into a single folder.
-# 2. Set the `input_data_folder` variable to the path of that folder.
-# 3. Set the `output_txt_folder` variable to where you want the .txt files to be saved.
-# 4. Set the `fps_rate` to your video's frame rate.
-# 5. Run the script.
+def main():
+    parser = argparse.ArgumentParser(
+        description="Convert binary CSV files (DeepEthogram style) to THEME-compatible .txt files."
+    )
+    parser.add_argument(
+        "input_dir",
+        help="Path to the folder containing the input .csv files."
+    )
+    parser.add_argument(
+        "output_dir",
+        help="Path to the folder where output .txt files will be saved."
+    )
 
-# Example usage:
-# On Windows, a path might look like: 'C:\\Users\\YourUser\\Documents\\GroomingData\\CSV'
-# On Mac/Linux, a path might look like: '/Users/youruser/Documents/GroomingData/CSV'
+    args = parser.parse_args()
 
-input_data_folder = '/Volumes/Storage/Research Project/Dopamine_Grooming_Hiro+Chloe/Joint-prob Labels/P18'
-output_txt_folder = '/Volumes/Storage/Research Project/Dopamine_Grooming_Hiro+Chloe/THEME_Labels/P18/Point'
+    # Validate paths
+    if not os.path.isdir(args.input_dir):
+        print(f"Error: Input directory '{args.input_dir}' does not exist.")
+        return
+
+    convert_binary_csv_to_theme(args.input_dir, args.output_dir)
 
 
-convert_binary_csv_to_theme(input_data_folder, output_txt_folder)
+if __name__ == "__main__":
+    main()
